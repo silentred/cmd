@@ -1,4 +1,4 @@
-package cmd_test
+package cmd
 
 import (
 	"errors"
@@ -9,23 +9,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-cmd/cmd"
 	"github.com/go-test/deep"
 )
 
 func TestCmdOK(t *testing.T) {
 	now := time.Now().Unix()
 
-	p := cmd.NewCmd("echo", "foo")
+	p := NewCmd("sh", "-c", `echo foo $BAR`)
+	p.AppendEnv([]string{"BAR=ok"})
 	gotStatus := <-p.Start()
-	expectStatus := cmd.Status{
-		Cmd:      "echo",
+	expectStatus := Status{
+		Cmd:      "sh",
 		PID:      gotStatus.PID, // nondeterministic
 		Complete: true,
 		Exit:     0,
 		Error:    nil,
 		Runtime:  gotStatus.Runtime, // nondeterministic
-		Stdout:   []string{"foo"},
+		Stdout:   []string{"foo ok"},
 		Stderr:   []string{},
 	}
 	if gotStatus.StartTs < now {
@@ -48,9 +48,9 @@ func TestCmdOK(t *testing.T) {
 }
 
 func TestCmdNonzeroExit(t *testing.T) {
-	p := cmd.NewCmd("false")
+	p := NewCmd("false")
 	gotStatus := <-p.Start()
-	expectStatus := cmd.Status{
+	expectStatus := Status{
 		Cmd:      "false",
 		PID:      gotStatus.PID, // nondeterministic
 		Complete: true,
@@ -78,7 +78,7 @@ func TestCmdStop(t *testing.T) {
 	// to kill the proc right after count "1" to ensure Stdout only contains "1"
 	// and also to ensure that the proc is really killed instantly because if
 	// it's not then timeout below will trigger.
-	p := cmd.NewCmd("./test/count-and-sleep", "3", "5")
+	p := NewCmd("./test/count-and-sleep", "3", "5")
 
 	// Start process in bg and get chan to receive final Status when done
 	statusChan := p.Start()
@@ -94,7 +94,7 @@ func TestCmdStop(t *testing.T) {
 
 	// The final status should be returned instantly
 	timeout := time.After(1 * time.Second)
-	var gotStatus cmd.Status
+	var gotStatus Status
 	select {
 	case gotStatus = <-statusChan:
 	case <-timeout:
@@ -110,7 +110,7 @@ func TestCmdStop(t *testing.T) {
 	gotStatus.StartTs = 0
 	gotStatus.StopTs = 0
 
-	expectStatus := cmd.Status{
+	expectStatus := Status{
 		Cmd:      "./test/count-and-sleep",
 		PID:      gotStatus.PID,                    // nondeterministic
 		Complete: false,                            // signaled by Stop
@@ -145,10 +145,10 @@ func TestCmdStop(t *testing.T) {
 
 func TestCmdNotStarted(t *testing.T) {
 	// Call everything _but_ Start.
-	p := cmd.NewCmd("echo", "foo")
+	p := NewCmd("echo", "foo")
 
 	gotStatus := p.Status()
-	expectStatus := cmd.Status{
+	expectStatus := Status{
 		Cmd:      "echo",
 		PID:      0,
 		Complete: false,
@@ -169,7 +169,7 @@ func TestCmdNotStarted(t *testing.T) {
 }
 
 func TestCmdOutput(t *testing.T) {
-	tmpfile, err := ioutil.TempFile("", "cmd.TestCmdOutput")
+	tmpfile, err := ioutil.TempFile("", "TestCmdOutput")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestCmdOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p := cmd.NewCmd("./test/touch-file-count", tmpfile.Name())
+	p := NewCmd("./test/touch-file-count", tmpfile.Name())
 
 	p.Start()
 
@@ -188,7 +188,7 @@ func TestCmdOutput(t *testing.T) {
 		}
 		time.Sleep(700 * time.Millisecond)
 	}
-	var s cmd.Status
+	var s Status
 	var stdout []string
 
 	touchFile(tmpfile.Name())
@@ -232,11 +232,11 @@ func TestCmdOutput(t *testing.T) {
 }
 
 func TestCmdNotFound(t *testing.T) {
-	p := cmd.NewCmd("cmd-does-not-exist")
+	p := NewCmd("cmd-does-not-exist")
 	gotStatus := <-p.Start()
 	gotStatus.StartTs = 0
 	gotStatus.StopTs = 0
-	expectStatus := cmd.Status{
+	expectStatus := Status{
 		Cmd:      "cmd-does-not-exist",
 		PID:      0,
 		Complete: false,
@@ -255,7 +255,7 @@ func TestCmdNotFound(t *testing.T) {
 func TestCmdLost(t *testing.T) {
 	// Test something like the kernel OOM killing the proc. So the proc is
 	// stopped outside our control.
-	p := cmd.NewCmd("./test/count-and-sleep", "3", "5")
+	p := NewCmd("./test/count-and-sleep", "3", "5")
 
 	statusChan := p.Start()
 
@@ -275,7 +275,7 @@ func TestCmdLost(t *testing.T) {
 
 	// Even though killed externally, our wait should return instantly
 	timeout := time.After(1 * time.Second)
-	var gotStatus cmd.Status
+	var gotStatus Status
 	select {
 	case gotStatus = <-statusChan:
 	case <-timeout:
@@ -285,7 +285,7 @@ func TestCmdLost(t *testing.T) {
 	gotStatus.StartTs = 0
 	gotStatus.StopTs = 0
 
-	expectStatus := cmd.Status{
+	expectStatus := Status{
 		Cmd:      "./test/count-and-sleep",
 		PID:      s.PID,
 		Complete: false,

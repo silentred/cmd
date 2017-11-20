@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"os"
 	"os/exec"
 	"sync"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 type Cmd struct {
 	Name string
 	Args []string
+	Env  []string
 	// --
 	*sync.Mutex
 	started   bool      // cmd.Start called, no error
@@ -69,6 +71,14 @@ func NewCmd(name string, args ...string) *Cmd {
 			Runtime:  0,
 		},
 	}
+}
+
+func (c *Cmd) AppendEnv(envVars []string) {
+	c.Env = append(c.Env, envVars...)
+}
+
+func (c *Cmd) SetEnv(envVars []string) {
+	c.Env = envVars
 }
 
 // Start starts the command and immediately returns a channel that the caller
@@ -166,6 +176,7 @@ func (c *Cmd) run() {
 	// Setup command
 	// //////////////////////////////////////////////////////////////////////
 	cmd := exec.Command(c.Name, c.Args...)
+	cmd.Env = append(os.Environ(), c.Env...)
 
 	// Set process group ID so the cmd and all its children become a new
 	// process grouc. This allows Stop to SIGTERM thei cmd's process group
