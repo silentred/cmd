@@ -36,6 +36,7 @@ func TestCmdOK(t *testing.T) {
 	}
 	gotStatus.StartTs = 0
 	gotStatus.StopTs = 0
+	t.Logf("runtime: %f", gotStatus.Runtime)
 	if diffs := deep.Equal(gotStatus, expectStatus); diffs != nil {
 		t.Error(diffs)
 	}
