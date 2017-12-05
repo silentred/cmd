@@ -201,6 +201,8 @@ func (c *Cmd) run() {
 	}
 	cmd.Stdout = c.stdout
 	cmd.Stderr = c.stderr
+	defer c.stdout.Close()
+	defer c.stderr.Close()
 
 	// //////////////////////////////////////////////////////////////////////
 	// Start command
@@ -213,8 +215,6 @@ func (c *Cmd) run() {
 		c.status.StopTs = time.Now().UnixNano()
 		c.done = true
 		c.Unlock()
-		c.stdout.Close()
-		c.stderr.Close()
 		return
 	}
 
@@ -234,8 +234,6 @@ func (c *Cmd) run() {
 	// Get exit code of the command
 	exitCode := 0
 	signaled := false
-	c.stdout.Close()
-	c.stderr.Close()
 	if err != nil {
 		if exiterr, ok := err.(*exec.ExitError); ok {
 			err = nil // exec.ExitError isn't a standard error
