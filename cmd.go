@@ -13,12 +13,16 @@ import (
 	"time"
 )
 
+type LinerWriterMaker func() LinerWriter
+
 // Cmd represents an external command, similar to the Go built-in os/exec.Cmd.
 // A Cmd cannot be reused after calling Start.
 type Cmd struct {
 	Name string
 	Args []string
 	Env  []string
+	// to create LinerWriter to collect stdout, stderr
+	LinerWriterFactory LinerWriterMaker
 	// --
 	*sync.Mutex
 	started   bool      // cmd.Start called, no error
@@ -26,8 +30,8 @@ type Cmd struct {
 	done      bool      // run() done
 	final     bool      // status finalized in Status
 	startTime time.Time // if started true
-	stdout    *output
-	stderr    *output
+	stdout    LinerWriter
+	stderr    LinerWriter
 	status    Status
 	doneChan  chan Status
 }
@@ -42,16 +46,16 @@ type Cmd struct {
 // If Complete is false, the command was stopped or timed out. Error is a Go
 // error related to starting or running the command.
 type Status struct {
-	Cmd      string
-	PID      int
-	Complete bool    // false if stopped or signaled
-	Exit     int     // exit code of process
-	Error    error   // Go error
-	StartTs  int64   // Unix ts (nanoseconds)
-	StopTs   int64   // Unix ts (nanoseconds)
-	Runtime  float64 // seconds
-	Stdout   []string
-	Stderr   []string
+	Cmd      string   `json:"cmd"`
+	PID      int      `json:"pid"`
+	Complete bool     `json:"complete"` // false if stopped or signaled
+	Exit     int      `json:"exit"`     // exit code of process
+	Error    error    `json:"-"`        // Go error
+	StartTs  int64    `json:"start_ts"` // Unix ts (nanoseconds)
+	StopTs   int64    `json:"stop_ts"`  // Unix ts (nanoseconds)
+	Runtime  float64  `json:"runtime"`  // seconds
+	Stdout   []string `json:"stdout"`
+	Stderr   []string `json:"stderr"`
 }
 
 // NewCmd creates a new Cmd for the given command name and arguments. The command
@@ -185,8 +189,12 @@ func (c *Cmd) run() {
 
 	// Write stdout and stderr to buffers that are safe to read while writing
 	// and don't cause a race condition.
-	c.stdout = newOutput()
-	c.stderr = newOutput()
+	var f = c.LinerWriterFactory
+	if f == nil {
+		f = newOutputWrapper
+	}
+	c.stdout = f()
+	c.stderr = f()
 	cmd.Stdout = c.stdout
 	cmd.Stderr = c.stderr
 
@@ -264,6 +272,10 @@ type output struct {
 	buf   *bytes.Buffer
 	lines []string
 	*sync.Mutex
+}
+
+func newOutputWrapper() LinerWriter {
+	return newOutput()
 }
 
 func newOutput() *output {
