@@ -13,16 +13,12 @@ import (
 	"time"
 )
 
-type LinerWriterMaker func() LinerWriter
-
 // Cmd represents an external command, similar to the Go built-in os/exec.Cmd.
 // A Cmd cannot be reused after calling Start.
 type Cmd struct {
 	Name string
 	Args []string
 	Env  []string
-	// to create LinerWriter to collect stdout, stderr
-	LinerWriterFactory LinerWriterMaker
 	// --
 	*sync.Mutex
 	started   bool      // cmd.Start called, no error
@@ -83,6 +79,14 @@ func (c *Cmd) AppendEnv(envVars []string) {
 
 func (c *Cmd) SetEnv(envVars []string) {
 	c.Env = envVars
+}
+
+func (c *Cmd) SetStdout(writer LinerWriter) {
+	c.stdout = writer
+}
+
+func (c *Cmd) SetStderr(writer LinerWriter) {
+	c.stderr = writer
 }
 
 // Start starts the command and immediately returns a channel that the caller
@@ -189,12 +193,12 @@ func (c *Cmd) run() {
 
 	// Write stdout and stderr to buffers that are safe to read while writing
 	// and don't cause a race condition.
-	var f = c.LinerWriterFactory
-	if f == nil {
-		f = newOutputWrapper
+	if c.stdout == nil {
+		c.stdout = newOutput()
 	}
-	c.stdout = f()
-	c.stderr = f()
+	if c.stderr == nil {
+		c.stderr = newOutput()
+	}
 	cmd.Stdout = c.stdout
 	cmd.Stderr = c.stderr
 
@@ -209,6 +213,8 @@ func (c *Cmd) run() {
 		c.status.StopTs = time.Now().UnixNano()
 		c.done = true
 		c.Unlock()
+		c.stdout.Close()
+		c.stderr.Close()
 		return
 	}
 
@@ -228,6 +234,8 @@ func (c *Cmd) run() {
 	// Get exit code of the command
 	exitCode := 0
 	signaled := false
+	c.stdout.Close()
+	c.stderr.Close()
 	if err != nil {
 		if exiterr, ok := err.(*exec.ExitError); ok {
 			err = nil // exec.ExitError isn't a standard error
@@ -304,3 +312,5 @@ func (rw *output) Lines() []string {
 	}
 	return rw.lines
 }
+
+func (rw *output) Close() error { return nil }
