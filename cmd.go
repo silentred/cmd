@@ -26,8 +26,8 @@ type Cmd struct {
 	done      bool      // run() done
 	final     bool      // status finalized in Status
 	startTime time.Time // if started true
-	stdout    LinerWriter
-	stderr    LinerWriter
+	stdout    Outputer
+	stderr    Outputer
 	status    Status
 	doneChan  chan Status
 }
@@ -81,11 +81,11 @@ func (c *Cmd) SetEnv(envVars []string) {
 	c.Env = envVars
 }
 
-func (c *Cmd) SetStdout(writer LinerWriter) {
+func (c *Cmd) SetStdout(writer Outputer) {
 	c.stdout = writer
 }
 
-func (c *Cmd) SetStderr(writer LinerWriter) {
+func (c *Cmd) SetStderr(writer Outputer) {
 	c.stderr = writer
 }
 
@@ -278,10 +278,6 @@ type output struct {
 	buf   *bytes.Buffer
 	lines []string
 	*sync.Mutex
-}
-
-func newOutputWrapper() LinerWriter {
-	return newOutput()
 }
 
 func newOutput() *output {
